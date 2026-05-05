@@ -1,10 +1,9 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import pino from 'pino'
 import chokidar from 'chokidar'
 import debounce from 'debounce'
 import picomatch from 'picomatch'
-import pRetry, { AbortError } from 'p-retry';
+import pRetry from 'p-retry';
 import { v4 as uuidv4 } from 'uuid'
 import pinoPretty from 'pino-pretty'
 
@@ -115,15 +114,19 @@ function waitforgrafana() {
     logger.info('Waiting for Grafana to be ready...')
     return pRetry(async () => {
         const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
+        if (response.status !== 200) {
+            throw new Error(`Grafana health check returned HTTP ${response.status}`)
+        }
         const json = await response.json()
         if (json.database !== "ok") {
-            throw new AbortError(`Grafana health check failed with database status: ${json.database}`)
+            throw new Error(`Grafana database not ready: ${json.database}`)
         }
-        if (response.status !== 200) { await sleep(5) }
     }, {
-        retries: 5,
+        retries: 24,
+        minTimeout: 5000,
+        maxTimeout: 10000,
         onFailedAttempt: error => {
-            logger.info(`Grafana health check attempt ${error.attemptNumber} failed. There are ${error.retriesLeft} retries left.`);
+            logger.info(`Grafana health check attempt ${error.attemptNumber} failed (${error.message}). There are ${error.retriesLeft} retries left.`);
         },
     })
 }
