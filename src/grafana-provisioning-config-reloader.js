@@ -208,11 +208,36 @@ async function main() {
                     .catch(err => logger.warn(err))
             }, 2000)
 
+            // Verify datasources are provisioned; retry reload if the provider hasn't written
+            // the file yet (race condition on first deployment — provider may lag behind).
+            const verifyDatasources = async () => {
+                const VERIFY_ATTEMPTS = 20
+                const VERIFY_DELAY_S = 30
+                for (let attempt = 1; attempt <= VERIFY_ATTEMPTS; attempt++) {
+                    await sleep(10)
+                    const resp = await request('datasources')
+                    const ds = await resp.json()
+                    if (Array.isArray(ds) && ds.length > 0) {
+                        logger.info(`Datasource verification OK: ${ds.length} datasource(s) provisioned`)
+                        return
+                    }
+                    logger.info(`No datasources found after reload (attempt ${attempt}/${VERIFY_ATTEMPTS}), retrying in ${VERIFY_DELAY_S}s...`)
+                    if (attempt < VERIFY_ATTEMPTS) {
+                        await sleep(VERIFY_DELAY_S)
+                        reloadDatasources('verify', '/verify/datasources')
+                    }
+                }
+                logger.warn('Datasource verification: no datasources provisioned after all attempts')
+            }
+
             // Trigger a reload of the provisioning configuration
             logger.info("Trigger a reload of the provisioning configuration")
             reloadAlerting('fake', '/fake/alerting/reload')
             reloadDashboards('fake', '/fake/dashboards/reload')
             reloadDatasources('fake', '/fake/datasources/reload')
+            if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED === 'true') {
+                verifyDatasources().catch(err => logger.warn({ err }, 'Datasource verification failed'))
+            }
 
             // Monitor provisioning directory for changes to dashboards and datasources,
             // then reload the provisioned configuration via the Grafana API
