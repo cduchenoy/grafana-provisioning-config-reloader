@@ -1,22 +1,55 @@
 # About
+
 Automatically monitor and reloads the Grafana provisioning config files
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/06b99b06-6e60-4258-8d7e-dc0897fd8b5a">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/f6445c39-8377-4187-af96-49876a884ec4">
-  <img src="https://github.com/user-attachments/assets/f6445c39-8377-4187-af96-49876a884ec4">
-</picture>
+```mermaid
+sequenceDiagram
+    participant FS as Provisioning Files<br/>/etc/grafana/provisioning
+    participant R as config-reloader
+    participant G as Grafana API
+
+    R->>+G: GET /api/health
+    G-->>-R: 200 OK (database: ok)
+
+    R->>G: POST /api/admin/provisioning/alerting/reload
+    R->>G: POST /api/admin/provisioning/dashboards/reload
+    R->>G: POST /api/admin/provisioning/datasources/reload
+
+    loop Watch for changes
+        FS-->>R: file change detected
+        R->>G: POST /api/admin/provisioning/*/reload
+    end
+```
 
 ## How it works?
 
-- During initial deployment of both Grafana and `grafana-provisioning-config-reloader`, the reloader will attempt to create a service account on Grafana using the default credentials and save it to a persistence storage
-- The agent will continuously monitor the provisioning directory for any changes and send request to Grafana Admin HTTP API to [reload the provisioning configurations](https://grafana.com/docs/grafana/latest/developers/http_api/admin/#reload-provisioning-configurations)
+- On startup, the reloader waits for Grafana to be ready, then triggers an initial reload of all provisioning configurations
+- It continuously monitors the provisioning directory for any changes and calls the [Grafana Admin HTTP API](https://grafana.com/docs/grafana/latest/developers/http_api/admin/#reload-provisioning-configurations) to reload the affected configurations
+- All API calls are made using the Grafana admin credentials (`GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`)
 
-The provisioning configurations are stored at `/etc/grafana/provisioning` with the following sub-directory:
-- `dashboards`: You can manage dashboards in Grafana by adding one or more YAML config files in this directory.
-- `datasources`: You can manage data sources in Grafana by adding YAML configuration files in this directory.
-  
+The provisioning configurations are stored at `/etc/grafana/provisioning` with the following sub-directories:
+
+- `alerting`: Alerting rules and contact points
+- `dashboards`: Dashboard definitions
+- `datasources`: Data source definitions
+
 See https://grafana.com/docs/grafana/latest/administration/provisioning for more information.
+
+## Configuration
+
+| Environment variable                                      | Default                     | Description                                                              |
+| --------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------ |
+| `GF_SERVER_DOMAIN`                                        | `localhost`                 | Grafana server domain                                                    |
+| `GF_SERVER_PROTOCOL`                                      | `http`                      | Grafana server protocol                                                  |
+| `GF_SERVER_HTTP_PORT`                                     | `3000`                      | Grafana server port                                                      |
+| `GF_SECURITY_ADMIN_USER`                                  | `grafana`                   | Grafana admin username                                                   |
+| `GF_SECURITY_ADMIN_PASSWORD`                              | `grafana`                   | Grafana admin password                                                   |
+| `GF_SECURITY_ADMIN_PASSWORD__FILE`                        | —                           | Path to a file containing the admin password (Docker secret)             |
+| `GF_PATHS_PROVISIONING`                                   | `/etc/grafana/provisioning` | Path to the provisioning directory                                       |
+| `GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL`          | `info`                      | Log level (`fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`) |
+| `GRAFANA_PROVISIONING_CONFIG_RELOADER_ALERTING_ENABLED`   | `true`                      | Enable alerting config reload                                            |
+| `GRAFANA_PROVISIONING_CONFIG_RELOADER_DASHBOARD_ENABLED`  | `true`                      | Enable dashboard config reload                                           |
+| `GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED` | `true`                      | Enable datasource config reload                                          |
 
 ## Usage
 
