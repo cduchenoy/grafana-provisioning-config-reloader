@@ -98,7 +98,7 @@ const provisioningDatasourcesMatcher = picomatch('**/datasources/*')
 // Structured logging
 const logger = pino({
     level: GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL,
-    timestamp: pino.stdTimeFunctions.isoTime,
+    timestamp: false,
 }, pinoPretty({ colorize: false, singleLine: true }))
 
 async function main() {
