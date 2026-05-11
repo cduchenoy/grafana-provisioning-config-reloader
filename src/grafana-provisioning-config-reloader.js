@@ -114,26 +114,30 @@ async function main() {
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
             }, 2000)
-            const reloadDashboards = debounce(function (event, path) {
+            const reloadDashboards = debounce(function () {
                 if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DASHBOARD_ENABLED !== 'true') { return }
                 write('admin/provisioning/dashboards/reload', {})
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
             }, 2000)
-            const reloadDatasources = debounce(function (event, path) {
+            const reloadDatasources = debounce(function () {
                 if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED !== 'true') { return }
                 write('admin/provisioning/datasources/reload', {})
-                    .then(res => logger.info(res.message))
+                    .then(res => {
+                        logger.info(res.message)
+                        // Dashboards depend on datasources — always reload after datasources
+                        reloadDashboards()
+                    })
                     .catch(err => logger.warn(err))
             }, 2000)
 
             // Verify datasources are provisioned; retry reload if the provider hasn't written
             // the file yet (race condition on first deployment — provider may lag behind).
             const verifyDatasources = async () => {
-                const VERIFY_ATTEMPTS = 20
-                const VERIFY_DELAY_S = 30
+                const VERIFY_ATTEMPTS = 5
+                const VERIFY_DELAY_S = 10
                 for (let attempt = 1; attempt <= VERIFY_ATTEMPTS; attempt++) {
-                    await sleep(10)
+                    await sleep(5)
                     const resp = await request('datasources')
                     const ds = await resp.json()
                     if (Array.isArray(ds) && ds.length > 0) {
@@ -143,19 +147,21 @@ async function main() {
                     logger.info(`No datasources found after reload (attempt ${attempt}/${VERIFY_ATTEMPTS}), retrying in ${VERIFY_DELAY_S}s...`)
                     if (attempt < VERIFY_ATTEMPTS) {
                         await sleep(VERIFY_DELAY_S)
-                        reloadDatasources('verify', '/verify/datasources')
+                        reloadDatasources()
                     }
                 }
                 logger.warn('Datasource verification: no datasources provisioned after all attempts')
             }
 
-            // Trigger a reload of the provisioning configuration
+            // Trigger a reload: datasources first, dashboards will follow after datasource reload succeeds.
+            // If datasources are disabled, reload dashboards directly.
             logger.info("Trigger a reload of the provisioning configuration")
-            reloadAlerting('fake', '/fake/alerting/reload')
-            reloadDashboards('fake', '/fake/dashboards/reload')
-            reloadDatasources('fake', '/fake/datasources/reload')
+            reloadAlerting()
             if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED === 'true') {
+                reloadDatasources()
                 verifyDatasources().catch(err => logger.warn({ err }, 'Datasource verification failed'))
+            } else {
+                reloadDashboards()
             }
 
             // Monitor provisioning directory for changes to dashboards and datasources,
