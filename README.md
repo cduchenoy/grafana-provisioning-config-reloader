@@ -33,15 +33,13 @@ The provisioning configurations are stored at `/etc/grafana/provisioning` with t
 - `dashboards`: Dashboard definitions
 - `datasources`: Data source definitions
 
-See https://grafana.com/docs/grafana/latest/administration/provisioning for more information.
+See <https://grafana.com/docs/grafana/latest/administration/provisioning> for more information.
 
 ## Configuration
 
 | Environment variable                                      | Default                     | Description                                                              |
 | --------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------ |
-| `GF_SERVER_DOMAIN`                                        | `localhost`                 | Grafana server domain                                                    |
-| `GF_SERVER_PROTOCOL`                                      | `http`                      | Grafana server protocol                                                  |
-| `GF_SERVER_HTTP_PORT`                                     | `3000`                      | Grafana server port                                                      |
+| `GF_SERVER_ROOT_URL`                                      | `http://localhost:3000`     | Grafana server URL                                                       |
 | `GF_SECURITY_ADMIN_USER`                                  | `grafana`                   | Grafana admin username                                                   |
 | `GF_SECURITY_ADMIN_PASSWORD`                              | `grafana`                   | Grafana admin password                                                   |
 | `GF_SECURITY_ADMIN_PASSWORD__FILE`                        | —                           | Path to a file containing the admin password (Docker secret)             |
@@ -53,7 +51,24 @@ See https://grafana.com/docs/grafana/latest/administration/provisioning for more
 
 ## Usage
 
-See https://github.com/swarmlibs/promstack/blob/main/grafana/docker-stack.yml for a real-world usage example.
+```yaml
+  provisioning-config-reloader:
+    image: docker.io/gecoit84/grafana-provisioning-config-reloader:0.2.0
+    environment:
+      GF_SERVER_ROOT_URL: http://server:3000
+      GF_PATHS_PROVISIONING: /grafana/provisioning
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin-passwd
+    secrets:
+      - grafana-admin-passwd
+    volumes:
+      - configs:/grafana
+    networks:
+      - default
+    deploy:
+      mode: replicated
+      replicas: 1
+```
 
 ## License
 
