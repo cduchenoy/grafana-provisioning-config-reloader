@@ -81,9 +81,9 @@ function waitforgrafana() {
             throw new Error(`Grafana database not ready: ${json.database}`)
         }
     }, {
-        retries: 24,
+        retries: 11,
         minTimeout: 5000,
-        maxTimeout: 10000,
+        maxTimeout: 5000,
         onFailedAttempt: error => {
             logger.info(`Grafana health check attempt ${error.attemptNumber} failed (${error.message}). There are ${error.retriesLeft} retries left.`);
         },
